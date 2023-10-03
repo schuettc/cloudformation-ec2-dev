@@ -1,0 +1,315 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Dev Server CloudFormation Template
+
+Parameters:
+  CpuType:
+    Description: CPU Architecture (ARM64 or X86_64)
+    Type: String
+    AllowedValues:
+      - ARM64
+      - X86-64
+    Default: ARM64
+
+  InstanceSize:
+    Description: EC2 instance size
+    Type: String
+    AllowedValues:
+      - large
+      - xlarge
+      - 2xlarge
+    Default: xlarge
+
+  AddAdministratorAccess:
+    Description: 'Whether to attach the AdministratorAccess policy to the instance role'
+    Type: String
+    Default: 'NO'
+    AllowedValues:
+      - 'YES'
+      - 'NO'
+    ConstraintDescription: 'Must be either YES or NO.'
+
+Conditions:
+  IsARM64: !Equals [!Ref CpuType, 'ARM64']
+  AttachAdministratorAccess: !Equals [!Ref AddAdministratorAccess, 'YES']
+
+Mappings:
+  AmiMapping:
+    ARM64:
+      ami: '/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-arm64'
+    X86-64:
+      ami: '/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64'
+
+Resources:
+  DevVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: Dev/VPC
+
+  DevSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.0.0/24
+      VpcId:
+        Ref: DevVPC
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: ''
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Dev/VPC/Subnet1
+
+  DevSubnet1RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: DevVPC
+      Tags:
+        - Key: Name
+          Value: Dev/VPC/Subnet1
+
+  DevSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: DevSubnet1RouteTable
+      SubnetId:
+        Ref: DevSubnet1
+
+  DevSubnet1DefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: DevSubnet1RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: VPCInternetGateway
+    DependsOn:
+      - VPCGatewayAttachment
+
+  DevSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      VpcId:
+        Ref: DevVPC
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: ''
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Dev/VPC/Subnet2
+
+  DevSubnet2RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: DevVPC
+      Tags:
+        - Key: Name
+          Value: Dev/VPC/Subnet2
+
+  DevSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: DevSubnet2RouteTable
+      SubnetId:
+        Ref: DevSubnet2
+
+  DevSubnet2DefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: DevSubnet2RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: VPCInternetGateway
+    DependsOn:
+      - VPCGatewayAttachment
+
+  VPCInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Dev/VPC
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: DevVPC
+      InternetGatewayId:
+        Ref: VPCInternetGateway
+
+  DevSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for Dev Server
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: '-1'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '3000'
+          ToPort: '3000'
+          CidrIp: 0.0.0.0/0
+      VpcId:
+        Ref: DevVPC
+
+  DevInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref InstanceTemplate
+        Version: !GetAtt InstanceTemplate.LatestVersionNumber
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: ''
+      SubnetId:
+        Ref: DevSubnet1
+      SecurityGroupIds:
+        - Fn::GetAtt:
+            - DevSecurityGroup
+            - GroupId
+      IamInstanceProfile:
+        Ref: DevInstanceProfile
+      Tags:
+        - Key: 'Name'
+          Value: 'DevServer'
+      UserData:
+        Fn::Base64: !Sub |
+          Content-Type: multipart/mixed; boundary="//"
+          MIME-Version: 1.0
+
+          --//
+          Content-Type: text/cloud-config; charset="us-ascii"
+          MIME-Version: 1.0
+          Content-Transfer-Encoding: 7bit
+          Content-Disposition: attachment; filename="cloud-config.txt"
+
+          #cloud-config
+          cloud_final_modules:
+          - [scripts-user, always]
+
+          --//
+          Content-Type: text/x-shellscript; charset="us-ascii"
+          MIME-Version: 1.0
+          Content-Transfer-Encoding: 7bit
+          Content-Disposition: attachment; filename="userdata.txt"
+
+          #!/bin/bash
+          dnf update -y
+          dnf install -y jq python3 python3-pip docker aws-cfn-bootstrap
+          pip3 install awscli
+          dnf install https://rpm.nodesource.com/pub_18.x/nodistro/repo/nodesource-release-nodistro-1.noarch.rpm -y
+          dnf install nodejs -y --setopt=nodesource-nodejs.module_hotfixes=1
+          corepack enable
+          usermod -aG docker ec2-user
+          newgrp docker
+          systemctl start docker
+          systemctl enable docker
+          GITHUB_KEY=$(aws ssm get-parameter --with-decryption --name /devServer/githubKey --query Parameter.Value --output text 2> /dev/null)
+          EXIT_CODE=$?
+          if [[ "$EXIT_CODE" -ne 0 ]]; then echo 'No GitHub Key found'; else echo 'Found GitHub Key' && echo $GITHUB_KEY | base64 -d > /home/ec2-user/.ssh/github.pem; fi
+          PUBLIC_KEY=$(aws ssm get-parameter --with-decryption --name /devServer/publicKey --query Parameter.Value --output text 2> /dev/null)
+          # PUBLIC_KEY=$( aws secretsmanager get-secret-value --secret-id publicKey --query 'SecretString' --output text 2> /dev/null )
+          EXIT_CODE=$?
+          if [[ "$EXIT_CODE" -ne 0 ]]; then echo 'No Public Key found'; else echo 'Found Public Key' && echo $PUBLIC_KEY | base64 -d >> /home/ec2-user/.ssh/authorized_keys; fi
+          chmod 600 /home/ec2-user/.ssh/github.pem
+          chown ec2-user:ec2-user /home/ec2-user/.ssh/*
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource DevInstance --region ${AWS::Region}
+          --//--
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+
+  DevInstanceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - !If [
+            AttachAdministratorAccess,
+            'arn:aws:iam::aws:policy/AdministratorAccess',
+            !Ref 'AWS::NoValue',
+          ]
+      Policies:
+        - PolicyName: AccessSSMParametersUnderDevServer
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ssm:GetParameters'
+                  - 'ssm:GetParametersByPath'
+                Resource:
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/devServer/*'
+
+  DevInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+        - !Ref DevInstanceRole
+
+  InstanceTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !If
+          - IsARM64
+          - !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-arm64:1}}'
+          - !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64:1}}'
+        InstanceType: !If
+          - IsARM64
+          - !Sub 'm7g.${InstanceSize}'
+          - !Sub 'm5.${InstanceSize}'
+        MetadataOptions:
+          HttpTokens: required
+          HttpPutResponseHopLimit: 2
+
+Outputs:
+  InstanceId:
+    Description: Instance ID of the dev server
+    Value: !Ref DevInstance
+  PublicIp:
+    Description: Public IP of instance
+    Value: !GetAtt DevInstance.PublicIp
