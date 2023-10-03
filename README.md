@@ -76,4 +76,4 @@ During deployment, you can choose the CPU Type, the Instance Size, and if you wi
 
 > Adding Administrator Access will allow you to use all AWS resources, but **must** be used with caution
 
-[![Launch](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://us-east-1.console.aws.amazon.com/cloudformation/home?region=eu-central-1#/stacks/create/review?templateURL=https://subaud-resources.s3.amazonaws.com/ec2-cloudformation/template.yaml&stackName=DevServer)
+[![Launch](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=https://subaud-resources.s3.amazonaws.com/ec2-cloudformation/template.yaml&stackName=DevServer)
