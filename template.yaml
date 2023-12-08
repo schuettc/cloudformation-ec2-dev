@@ -19,6 +19,13 @@ Parameters:
       - 2xlarge
     Default: xlarge
 
+  VolumeSize:
+    Description: Root Volume Size (GiB)
+    Type: Number
+    Default: 30
+    MinValue: 8
+    MaxValue: 100
+
   AddAdministratorAccess:
     Description: 'Whether to attach the AdministratorAccess policy to the instance role'
     Type: String
@@ -31,13 +38,6 @@ Parameters:
 Conditions:
   IsARM64: !Equals [!Ref CpuType, 'ARM64']
   AttachAdministratorAccess: !Equals [!Ref AddAdministratorAccess, 'YES']
-
-# Mappings:
-#   AmiMapping:
-#     ARM64:
-#       ami: '/aws/service/canonical/ubuntu/server/jammy/stable/current/arm64/hvm/ebs-gp2/ami-id'
-#     X86-64:
-#       ami: '/aws/service/canonical/ubuntu/server/jammy/stable/current/amd64/hvm/ebs-gp2/ami-id'
 
 Resources:
   DevVPC:
@@ -193,6 +193,10 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref InstanceTemplate
         Version: !GetAtt InstanceTemplate.LatestVersionNumber
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: !Ref VolumeSize
       AvailabilityZone:
         Fn::Select:
           - 0
@@ -250,7 +254,7 @@ Resources:
 
           GITHUB_KEY=$(aws ssm get-parameter --with-decryption --name /devServer/githubKey --query Parameter.Value --output text 2> /dev/null)
           EXIT_CODE=$?
-          if [[ "$EXIT_CODE" -ne 0 ]]; then echo 'No GitHub Key found'; else echo 'Found GitHub Key' && echo $GITHUB_KEY | base64 -d > /home/ubuntu/.ssh/github.pem && chmod 600 /home/ubuntu/.ssh/github.pem; fi
+          if [[ "$EXIT_CODE" -ne 0 ]]; then echo 'No GitHub Key found'; else echo 'Found GitHub Key' && echo $GITHUB_KEY | base64 -d > /home/ubuntu/.ssh/github.pem && chmod 600 /home/ubuntu/.ssh/github.pem && echo -e "Host github.com\n\tIdentityFile ~/.ssh/github.pem" >> /home/ubuntu/.ssh/config; fi
           PUBLIC_KEY=$(aws ssm get-parameter --with-decryption --name /devServer/publicKey --query Parameter.Value --output text 2> /dev/null)
           # PUBLIC_KEY=$( aws secretsmanager get-secret-value --secret-id publicKey --query 'SecretString' --output text 2> /dev/null )
           EXIT_CODE=$?

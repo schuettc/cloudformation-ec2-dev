@@ -3,7 +3,7 @@
 This simple Cloudformation template will deploy a new EC2 instance in a new VPC that can be used for dev work. This instance uses [Amazon Linux 2023](https://aws.amazon.com/linux/amazon-linux-2023/) with either an [ARM64](https://aws.amazon.com/ec2/instance-types/m7g/) or [X86_64](https://aws.amazon.com/ec2/instance-types/m5/) CPU and can be deployed as a `LARGE`, `XLARGE`, or `2XLARGE` instance size. It comes pre-installed with several commonly used packages:
 
 - NodeJS 18
-- Python 3.9
+- Python
 - pip
 - jq
 - Docker
@@ -72,7 +72,7 @@ This will open the following ports:
 
 ![DeploymentOptions](images/DeploymentOptions.png)
 
-During deployment, you can choose the CPU Type, the Instance Size, and if you wish to add Administrator Access.
+During deployment, you can choose the CPU Type, the Instance Size, Volume Size, and if you wish to add Administrator Access.
 
 > Adding Administrator Access will allow you to use all AWS resources, but **must** be used with caution
 
