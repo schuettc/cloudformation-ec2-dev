@@ -2,6 +2,18 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Dev Server CloudFormation Template
 
 Parameters:
+  VPCId:
+    Description: 'VPC to use or create new'
+    Type: AWS::EC2::VPC::Id
+    Default: ''
+    ConstraintDescription: 'Must be a valid VPC ID or leave blank to create a new VPC'
+
+  SubnetId:
+    Description: 'Subnet to use or create new'
+    Type: AWS::EC2::Subnet::Id
+    Default: ''
+    ConstraintDescription: 'Must be a valid Subnet ID or leave blank to create a new subnet'
+
   CpuType:
     Description: CPU Architecture (ARM64 or X86_64)
     Type: String
@@ -38,10 +50,15 @@ Parameters:
 Conditions:
   IsARM64: !Equals [!Ref CpuType, 'ARM64']
   AttachAdministratorAccess: !Equals [!Ref AddAdministratorAccess, 'YES']
+  CreateNewVPC: !Equals [!Ref VPCId, '']
+  CreateNewSubnet: !And
+    - !Condition CreateNewVPC
+    - !Equals [!Ref SubnetId, '']
 
 Resources:
   DevVPC:
     Type: AWS::EC2::VPC
+    Condition: CreateNewVPC
     Properties:
       CidrBlock: 10.0.0.0/16
       EnableDnsHostnames: true
@@ -53,6 +70,7 @@ Resources:
 
   DevSubnet1:
     Type: AWS::EC2::Subnet
+    Condition: CreateNewSubnet
     Properties:
       CidrBlock: 10.0.0.0/24
       VpcId:
@@ -68,6 +86,7 @@ Resources:
 
   DevSubnet1RouteTable:
     Type: AWS::EC2::RouteTable
+    Condition: CreateNewVPC
     Properties:
       VpcId:
         Ref: DevVPC
@@ -77,6 +96,7 @@ Resources:
 
   DevSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateNewVPC
     Properties:
       RouteTableId:
         Ref: DevSubnet1RouteTable
@@ -85,6 +105,7 @@ Resources:
 
   DevSubnet1DefaultRoute:
     Type: AWS::EC2::Route
+    Condition: CreateNewVPC
     Properties:
       RouteTableId:
         Ref: DevSubnet1RouteTable
@@ -96,6 +117,7 @@ Resources:
 
   DevSubnet2:
     Type: AWS::EC2::Subnet
+    Condition: CreateNewSubnet
     Properties:
       CidrBlock: 10.0.1.0/24
       VpcId:
@@ -111,6 +133,7 @@ Resources:
 
   DevSubnet2RouteTable:
     Type: AWS::EC2::RouteTable
+    Condition: CreateNewVPC
     Properties:
       VpcId:
         Ref: DevVPC
@@ -120,6 +143,7 @@ Resources:
 
   DevSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateNewVPC
     Properties:
       RouteTableId:
         Ref: DevSubnet2RouteTable
@@ -128,6 +152,7 @@ Resources:
 
   DevSubnet2DefaultRoute:
     Type: AWS::EC2::Route
+    Condition: CreateNewVPC
     Properties:
       RouteTableId:
         Ref: DevSubnet2RouteTable
@@ -139,6 +164,7 @@ Resources:
 
   VPCInternetGateway:
     Type: AWS::EC2::InternetGateway
+    Condition: CreateNewVPC
     Properties:
       Tags:
         - Key: Name
@@ -146,6 +172,7 @@ Resources:
 
   VPCGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
+    Condition: CreateNewVPC
     Properties:
       VpcId:
         Ref: DevVPC
@@ -181,8 +208,10 @@ Resources:
           FromPort: '3000'
           ToPort: '3000'
           CidrIp: 0.0.0.0/0
-      VpcId:
-        Ref: DevVPC
+      VpcId: !If
+        - CreateNewVPC
+        - !Ref DevVPC
+        - !Ref VPCId
 
   DevInstance:
     Type: 'AWS::EC2::Instance'
@@ -201,8 +230,10 @@ Resources:
         Fn::Select:
           - 0
           - Fn::GetAZs: ''
-      SubnetId:
-        Ref: DevSubnet1
+      SubnetId: !If
+        - CreateNewSubnet
+        - !Ref DevSubnet1
+        - !Ref SubnetId
       SecurityGroupIds:
         - Fn::GetAtt:
             - DevSecurityGroup
@@ -227,14 +258,14 @@ Resources:
           while fuser /var/{lib/{dpkg,apt/lists},cache/apt/archives}/lock >/dev/null 2>&1; do sleep 1; done
           mkdir -p /etc/apt/keyrings
           curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-          NODE_MAJOR=18
+          NODE_MAJOR=20
           echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list          
           curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
           echo "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
           apt-get update
-          apt-get install zip unzip nodejs python3-pip jq git docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+          apt-get install zip unzip nodejs python3-pip jq git docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose docker-compose-plugin -y
           while fuser /var/{lib/{dpkg,apt/lists},cache/apt/archives}/lock >/dev/null 2>&1; do sleep 1; done
-          corepack enable
+          corepack enable 
 
           if [ "${CpuType}" = "ARM64" ]; then
             curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
@@ -256,7 +287,6 @@ Resources:
           EXIT_CODE=$?
           if [[ "$EXIT_CODE" -ne 0 ]]; then echo 'No GitHub Key found'; else echo 'Found GitHub Key' && echo $GITHUB_KEY | base64 -d > /home/ubuntu/.ssh/github.pem && chmod 600 /home/ubuntu/.ssh/github.pem && echo -e "Host github.com\n\tIdentityFile ~/.ssh/github.pem" >> /home/ubuntu/.ssh/config; fi
           PUBLIC_KEY=$(aws ssm get-parameter --with-decryption --name /devServer/publicKey --query Parameter.Value --output text 2> /dev/null)
-          # PUBLIC_KEY=$( aws secretsmanager get-secret-value --secret-id publicKey --query 'SecretString' --output text 2> /dev/null )
           EXIT_CODE=$?
           if [[ "$EXIT_CODE" -ne 0 ]]; then echo 'No Public Key found'; else echo 'Found Public Key' && echo $PUBLIC_KEY | base64 -d >> /home/ubuntu/.ssh/authorized_keys; fi
           chown ubuntu:ubuntu /home/ubuntu/.ssh/*

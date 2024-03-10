@@ -2,7 +2,7 @@
 
 This simple Cloudformation template will deploy a new EC2 instance in a new VPC that can be used for dev work. This instance uses [Amazon Linux 2023](https://aws.amazon.com/linux/amazon-linux-2023/) with either an [ARM64](https://aws.amazon.com/ec2/instance-types/m7g/) or [X86_64](https://aws.amazon.com/ec2/instance-types/m5/) CPU and can be deployed as a `LARGE`, `XLARGE`, or `2XLARGE` instance size. It comes pre-installed with several commonly used packages:
 
-- NodeJS 18
+- NodeJS 20
 - Python
 - pip
 - jq
@@ -24,12 +24,11 @@ During deployment, these parameters will be read and used to configure the insta
 ```bash
 GITHUB_KEY=$(aws ssm get-parameter --with-decryption --name /devServer/githubKey --query Parameter.Value --output text 2> /dev/null)
 EXIT_CODE=$?
-if [[ "$EXIT_CODE" -ne 0 ]]; then echo 'No GitHub Key found'; else echo 'Found GitHub Key' && echo $GITHUB_KEY | base64 -d > /home/ec2-user/.ssh/github.pem; fi
+if [[ "$EXIT_CODE" -ne 0 ]]; then echo 'No GitHub Key found'; else echo 'Found GitHub Key' && echo $GITHUB_KEY | base64 -d > /home/ubuntu/.ssh/github.pem && chmod 600 /home/ubuntu/.ssh/github.pem && echo -e "Host github.com\n\tIdentityFile ~/.ssh/github.pem" >> /home/ubuntu/.ssh/config; fi
 PUBLIC_KEY=$(aws ssm get-parameter --with-decryption --name /devServer/publicKey --query Parameter.Value --output text 2> /dev/null)
 EXIT_CODE=$?
-if [[ "$EXIT_CODE" -ne 0 ]]; then echo 'No Public Key found'; else echo 'Found Public Key' && echo $PUBLIC_KEY | base64 -d >> /home/ec2-user/.ssh/authorized_keys; fi
-chmod 600 /home/ec2-user/.ssh/github.pem
-chown ec2-user:ec2-user /home/ec2-user/.ssh/*
+if [[ "$EXIT_CODE" -ne 0 ]]; then echo 'No Public Key found'; else echo 'Found Public Key' && echo $PUBLIC_KEY | base64 -d >> /home/ubuntu/.ssh/authorized_keys; fi
+chown ubuntu:ubuntu /home/ubuntu/.ssh/*
 ```
 
 ## Security Group
