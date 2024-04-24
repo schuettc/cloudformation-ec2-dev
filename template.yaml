@@ -3,14 +3,14 @@ Description: Dev Server CloudFormation Template
 
 Parameters:
   VPCId:
-    Description: 'VPC to use or create new'
-    Type: AWS::EC2::VPC::Id
+    Description: VPC to use or create new
+    Type: String
     Default: ''
     ConstraintDescription: 'Must be a valid VPC ID or leave blank to create a new VPC'
 
   SubnetId:
-    Description: 'Subnet to use or create new'
-    Type: AWS::EC2::Subnet::Id
+    Description: Subnet to use or create new
+    Type: String
     Default: ''
     ConstraintDescription: 'Must be a valid Subnet ID or leave blank to create a new subnet'
 
